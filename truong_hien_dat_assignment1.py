@@ -208,7 +208,7 @@ matches = list(matches)  # ensure list
 
 # Sort matches
 matches.sort(key=lambda x: x.distance)
-numGoodMatches = max(1, int(len(matches)*0.1))  # top 10%
+numGoodMatches = max(1, int(len(matches)*0.1))
 good_matches = matches[:numGoodMatches]
 
 # Extract matched points
@@ -223,26 +223,22 @@ for i, match in enumerate(good_matches):
 h, mask = cv.findHomography(points2, points1, cv.RANSAC)
 
 # Warp scanned image to align with original
-height, width = img1.shape[:2]
-aligned_img2 = cv.warpPerspective(img2, h, (width, height), borderMode=cv.BORDER_REPLICATE)
-
-# Convert to grayscale & blur to reduce small misalignment noise
-gray1_blur = cv.GaussianBlur(gray1, (3,3), 0)
-aligned_gray2_blur = cv.GaussianBlur(cv.cvtColor(aligned_img2, cv.COLOR_BGR2GRAY), (3,3), 0)
+height, width, channels = img1.shape
+aligned_img2 = cv.warpPerspective(img2, h, (width, height))
 
 # Compute absolute difference
-diff_gray = cv.absdiff(gray1_blur, aligned_gray2_blur)
-_, diff_thresh = cv.threshold(diff_gray, 25, 255, cv.THRESH_BINARY)
+diff_gray = cv.absdiff(img1, aligned_img2)
+_, diff_thresh = cv.threshold(diff_gray, 25, 255, cv.THRESH_BINARY) #increase the intensity of the difference
 
 # Display results
 plt.figure(figsize=(18,6))
 plt.subplot(1,3,1)
-plt.imshow(gray1_blur, cmap='gray')
+plt.imshow(img1, cmap='gray')
 plt.title('Original Grayscale')
 plt.axis('off')
 
 plt.subplot(1,3,2)
-plt.imshow(aligned_gray2_blur, cmap='gray')
+plt.imshow(aligned_img2, cmap='gray')
 plt.title('Aligned Scanned')
 plt.axis('off')
 
