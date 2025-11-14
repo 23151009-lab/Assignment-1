@@ -139,6 +139,7 @@ plt.show()
 """**Subtract two images/find the difference of two images (without alignment)**"""
 
 uploaded = files.upload()
+
 img1 = cv.imread('image1.png')
 img2 = cv.imread('image2.png')
 
@@ -171,101 +172,82 @@ plt.show()
 """**Subtract two images/find the difference of two images (**with** alignment)**"""
 
 uploaded = files.upload()
+
 img1 = cv.imread('image1.png')
 img2 = cv.imread('image2.png')
 
-plt.figure(figsize=(10, 8))
-
-plt.subplot(1, 2, 1)
-plt.imshow(img1)
+# Original images
+plt.figure(figsize=(12,5))
+plt.subplot(1,2,1)
+plt.imshow(cv.cvtColor(img1, cv.COLOR_BGR2RGB))
 plt.title('Original')
 plt.axis('off')
 
-plt.subplot(1, 2, 2)
-plt.imshow(img2)
+plt.subplot(1,2,2)
+plt.imshow(cv.cvtColor(img2, cv.COLOR_BGR2RGB))
 plt.title('Scanned')
 plt.axis('off')
-
-plt.tight_layout()
 plt.show()
 
-# Convert images to grayscale
+# Convert to grayscale
 gray1 = cv.cvtColor(img1, cv.COLOR_BGR2GRAY)
 gray2 = cv.cvtColor(img2, cv.COLOR_BGR2GRAY)
 
 # Create ORB detector
-MAX_NUM_FEATURES=5000
+MAX_NUM_FEATURES = 5000
 orb = cv.ORB_create(MAX_NUM_FEATURES)
 
 # Find keypoints and descriptors
 kp1, des1 = orb.detectAndCompute(gray1, None)
 kp2, des2 = orb.detectAndCompute(gray2, None)
 
-# Display
-im1_display = cv.drawKeypoints(img1, kp1, outImage=np.array([]), color=(0, 255, 0), flags=cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-im2_display = cv.drawKeypoints(img2, kp2, outImage=np.array([]), color=(0, 255, 0), flags=cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-
-plt.figure(figsize=(10, 8))
-
-plt.subplot(1, 2, 1)
-plt.imshow(im1_display)
-plt.title('Original')
-plt.axis('off')
-
-plt.subplot(1, 2, 2)
-plt.imshow(im2_display)
-plt.title('Scanned')
-plt.axis('off')
-
-plt.tight_layout()
-plt.show()
-
-# Match features
+# Feature matching
 matcher = cv.DescriptorMatcher_create(cv.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
 matches = matcher.match(des1, des2)
+matches = list(matches)  # ensure list
 
-# Sort matches by scores
-matches = list(matches) #ensure a list, prevent 'tuple' error
-matches.sort(key=lambda x: x.distance, reverse=False)
+# Sort matches
+matches.sort(key=lambda x: x.distance)
+numGoodMatches = max(1, int(len(matches)*0.1))  # top 10%
+good_matches = matches[:numGoodMatches]
 
-# Remove not so good matches
-numGoodMatches = int(len(matches) * 0.1)
-matches = matches[:numGoodMatches]
+# Extract matched points
+points1 = np.zeros((len(good_matches),2), dtype=np.float32)
+points2 = np.zeros((len(good_matches),2), dtype=np.float32)
 
-# Draw top matches
-imMatches = cv.drawMatches(img1, kp1, img2, kp2, matches, None)
+for i, match in enumerate(good_matches):
+    points1[i,:] = kp1[match.queryIdx].pt
+    points2[i,:] = kp2[match.trainIdx].pt
 
-plt.figure(figsize=(40,10))
+# Find homography
+h, mask = cv.findHomography(points2, points1, cv.RANSAC)
 
-plt.imshow(imMatches)
-plt.title('Original')
-plt.axis('off')
+# Warp scanned image to align with original
+height, width = img1.shape[:2]
+aligned_img2 = cv.warpPerspective(img2, h, (width, height), borderMode=cv.BORDER_REPLICATE)
 
-plt.tight_layout()
-plt.show()
+# Convert to grayscale & blur to reduce small misalignment noise
+gray1_blur = cv.GaussianBlur(gray1, (3,3), 0)
+aligned_gray2_blur = cv.GaussianBlur(cv.cvtColor(aligned_img2, cv.COLOR_BGR2GRAY), (3,3), 0)
 
-# Absolute difference
-diff = cv.absdiff(img1, aligned_img2)
+# Compute absolute difference
+diff_gray = cv.absdiff(gray1_blur, aligned_gray2_blur)
+_, diff_thresh = cv.threshold(diff_gray, 25, 255, cv.THRESH_BINARY)
 
-# Grayscale changes
-diff_gray = cv.cvtColor(diff, cv.COLOR_BGR2GRAY)
-
-plt.figure(figsize=(20,7))
-
+# Display results
+plt.figure(figsize=(18,6))
 plt.subplot(1,3,1)
-plt.title("Image 1")
-plt.imshow(cv.cvtColor(img1, cv.COLOR_BGR2RGB))
+plt.imshow(gray1_blur, cmap='gray')
+plt.title('Original Grayscale')
 plt.axis('off')
 
 plt.subplot(1,3,2)
-plt.title("Aligned Image 2")
-plt.imshow(cv.cvtColor(aligned_img2, cv.COLOR_BGR2RGB))
+plt.imshow(aligned_gray2_blur, cmap='gray')
+plt.title('Aligned Scanned')
 plt.axis('off')
 
 plt.subplot(1,3,3)
-plt.title("Difference Highlighted")
 plt.imshow(diff_thresh, cmap='gray')
+plt.title('Difference Highlighted')
 plt.axis('off')
-
-plt.tight_layout()
 plt.show()
